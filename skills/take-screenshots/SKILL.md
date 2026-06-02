@@ -9,7 +9,9 @@ description: Use when the user asks to take screenshots of a web application, ca
 
 Take screenshots of web applications using MCP browser automation tools. **Chrome DevTools MCP is preferred; Playwright MCP is the fallback.** The skill enforces safe, read-only screenshot capture without modifying application data, using only the main conversation thread.
 
-**Core principle:** Screenshots are read-only operations. Never modify data, never use scripts, and never delegate to sub-agents.
+**Core principles:**
+1. Screenshots are read-only operations. Never modify data, never use scripts, and never delegate to sub-agents.
+2. **Always verify results.** After every screenshot, double-check the MCP-returned content (via snapshot) to ensure the webpage actually shows what the user expected — not an error page, login gate, or empty state.
 
 ## Prerequisites — MCP Detection (MANDATORY)
 
@@ -78,29 +80,121 @@ If the page has dynamic content, use the MCP wait tool:
 
 Wait for key text or elements to appear before capturing.
 
-#### C. Take the Screenshot — FULL PAGE (MANDATORY)
+#### C. Detect Page Scrollability (MANDATORY)
 
-**Every screenshot MUST capture the entire page, not just the visible viewport.** This ensures long pages (documentation, lists, dashboards with scrolled content, changelogs, etc.) are fully captured.
+Before taking any screenshot, determine whether the page has a vertical scrollbar (i.e., content extends beyond one viewport height). Use `evaluate_script` (Chrome DevTools MCP) or `browser_evaluate` (Playwright MCP):
 
-- Chrome DevTools MCP: `take_screenshot` with `fullPage: true` and a descriptive `filename`
-- Playwright MCP: `browser_take_screenshot` with `full_page: true` and a descriptive `filename`
+```
+// Returns { scrollable: boolean, totalHeight: number, viewportHeight: number }
+() => {
+  return {
+    scrollable: document.documentElement.scrollHeight > window.innerHeight + 10,
+    totalHeight: document.documentElement.scrollHeight,
+    viewportHeight: window.innerHeight
+  }
+}
+```
 
-**No exceptions — always use full page capture:**
-- Don't skip because "this page isn't that long"
-- Don't skip because "this page type looks better viewport-only"
-- Don't skip because "the important content fits in the viewport"
-- Don't skip for dashboards, landing pages, or any other page type
-- Don't fall back to viewport capture for any reason
+- **If NOT scrollable** (totalHeight ≈ viewportHeight) → Take a single viewport screenshot (step C1).
+- **If scrollable** (totalHeight > viewportHeight + 10px) → Take multiple viewport screenshots at different scroll positions (step C2).
 
-Save to the screenshot directory with clear, descriptive filenames (e.g., `login-page.png`, `dashboard.png`, `settings-profile.png`).
+#### C1. Single Screenshot (Non-Scrollable Page)
 
-#### D. Take a Snapshot (Optional but Recommended)
+For pages whose entire content fits within one viewport:
 
-Also capture an accessibility snapshot for documentation:
+- Chrome DevTools MCP: `take_screenshot` with `fullPage: true`
+- Playwright MCP: `browser_take_screenshot` with `full_page: true`
+
+Save as: `{num}-{description}.png` (e.g., `1-login-page.png`, `3-settings-profile.png`)
+
+Then skip to step D.
+
+#### C2. Multi-Position Screenshots (Scrollable Page) — MANDATORY
+
+For pages WITH a vertical scrollbar, **capture viewport-level screenshots at multiple scroll positions** to cover the entire page content with high fidelity. Full-page screenshots of very long pages lose detail; viewport-level captures at each scroll position preserve readability.
+
+**Scroll position targets and naming convention:**
+
+```
+{num}-0%-{description}.png    → Top of page (scroll position 0%)
+{num}-40%-{description}.png   → ~40% scroll position
+{num}-70%-{description}.png   → ~70% scroll position
+{num}-100%-{description}.png  → Bottom of page (scroll position 100%)
+```
+
+**How to capture each position:**
+
+For each target percentage (0%, 40%, 70%, 100%), scroll to that position first, then take a **viewport-only** screenshot (NOT fullPage):
+
+1. **Scroll to position** — Use `evaluate_script` to set `window.scrollTo(0, Math.floor(document.documentElement.scrollHeight * 0.X))` where `0.X` is the target ratio.
+
+2. **Wait for content** — After scrolling, wait briefly for any lazy-loaded content or re-renders (500ms minimum).
+
+3. **Take viewport screenshot** — Use `take_screenshot` WITHOUT `fullPage` flag, or `browser_take_screenshot` WITHOUT `full_page`. This captures exactly what the user sees at that scroll position.
+
+```
+# Example for a scrollable login page "【图1：登录页面】":
+1-0%-login-page.png
+1-40%-login-page.png
+1-70%-login-page.png
+1-100%-login-page.png
+```
+
+**Scroll position selection rules:**
+- Always capture **0%** (top) and **100%** (bottom) — these are non-negotiable.
+- For pages with 1.5–3× viewport height → 0%, 50%, 100% (3 screenshots, skip 40%/70%).
+- For pages with 3–5× viewport height → 0%, 40%, 70%, 100% (4 screenshots — the standard).
+- For pages with 5+× viewport height → 0%, 25%, 50%, 75%, 100% (5 screenshots).
+- Adjust positions to align with logical content sections when possible (e.g., if a section boundary falls at 35%, use 35% instead of 40%).
+
+**CRITICAL: Each scroll position screenshot must be a viewport capture, NOT fullPage.** The whole point is to capture readable viewport-level details at each position. Full-page at each scroll position would be redundant and miss the purpose.
+
+**No exceptions:**
+- Don't skip scroll detection because "this page looks short"
+- Don't reduce the number of positions because "the content is repetitive"
+- Don't use fullPage instead of multiple viewport captures for scrollable pages
+- Don't skip the bottom (100%) position — it often contains footer, legal, or secondary content
+
+#### D. Take a Snapshot (MANDATORY for Verification)
+
+Capture an accessibility snapshot for content verification:
 - Chrome DevTools MCP: `take_snapshot`
 - Playwright MCP: `browser_snapshot`
 
-This provides text context for what's visible in the screenshot.
+This provides text content to verify the screenshot captured the correct page. **This step is now mandatory** — you cannot verify content without it.
+
+#### E. Verify Screenshot Content (MANDATORY)
+
+**CRITICAL: After every screenshot, double-check the MCP results to ensure the webpage content satisfies the user's demand.** Do NOT blindly trust that the screenshot captured the right page. MCP operations can silently fail — the page may redirect to a login screen, show an error page, display empty data, or render partially.
+
+**Verification checklist (run after every screenshot):**
+
+1. **Check the page URL/title** — Does the snapshot text show the expected page name or heading?
+2. **Check for error states** — Look for error messages, "404", "500", "Access Denied", "Loading failed", blank pages, or unexpected redirects
+3. **Check for auth gates** — If expecting a logged-in page, verify the snapshot shows actual content (not "Please login", a login form, or an auth error)
+4. **Check for empty/dummy data** — If expecting a list, table, or data view, verify the rows/cards actually contain data (not "No data", "Empty", or skeleton placeholders)
+5. **Check for the expected UI elements** — Match against the user's described target: if the user asked for "dashboard with stats cards", verify stats cards appear in the snapshot text; if they asked for "settings page with profile form", verify profile form fields are present
+6. **Check scroll position coverage** (for multi-position captures) — Each scroll position screenshot MUST show different content. If 0%, 40%, 70%, and 100% all show the same viewport, scrolling failed. Verify the snapshot text changes between positions.
+
+**If verification FAILS (content does not match expectations):**
+
+1. **Diagnose the problem** — What did the page actually show? Is it a login redirect, error, empty state, or wrong page?
+2. **Fix the issue** — If it's a login gate, navigate to login first and authenticate. If it's a wrong URL, correct the route. If it's empty data, seed data or navigate to a populated view.
+3. **Re-capture** — After fixing, re-take the screenshot AND re-verify.
+4. **Report the issue** — If the problem cannot be fixed (e.g., requires backend data that doesn't exist), note it in the final report as a partial capture with explanation.
+
+**Example verification failures and actions:**
+
+| Snapshot Shows | Expected | Action |
+|---------------|----------|--------|
+| Login form / "请登录" | Dashboard with charts | Navigate to login → authenticate → re-navigate to target → re-capture |
+| "404 Not Found" | User profile page | Check route correctness, fix URL → re-capture |
+| "No data available" | Table with 20 rows | Seed test data or navigate to a populated view → re-capture |
+| Blank white page | Full page content | Wait longer for JS to load, or check for JS errors → re-capture |
+| Error "500 Internal Server" | Any page | Report as capture failure, note server error |
+| Wrong page title/heading | Specific module page | Verify the navigation steps, correct route → re-capture |
+
+**If verification PASSES:** Proceed to the next screenshot. Note in your response what you verified (e.g., "Confirmed: snapshot shows 'Dashboard' heading, 4 stat cards with data, and recent activity table with 10 rows").
 
 **IMPORTANT:** Process pages ONE AT A TIME, sequentially. Do NOT parallelize.
 
@@ -134,11 +228,14 @@ After ALL screenshots are captured, produce a report:
 
 ### Successfully Captured
 
-| # | Screenshot | File Path | Description |
-|---|-----------|-----------|-------------|
-| 1 | Login page | `./screenshots/login.png` | Login form with email/password fields |
-| 2 | Dashboard | `./screenshots/dashboard.png` | Main dashboard with stats overview |
-| ... | ... | ... | ... |
+| # | Screenshot | File Path | Description | Verified |
+|---|-----------|-----------|-------------|----------|
+| 1a | Login page (top) | `./screenshots/1-0%-login-page.png` | Logo + username/password fields | ✅ Heading "登录", form fields present |
+| 1b | Login page (40%) | `./screenshots/1-40%-login-page.png` | Additional login options, SSO buttons | ✅ SSO buttons visible, "忘记密码" link |
+| 1c | Login page (70%) | `./screenshots/1-70%-login-page.png` | Footer area, help links | ✅ Footer links, copyright |
+| 1d | Login page (bottom) | `./screenshots/1-100%-login-page.png` | Full footer, legal, contact info | ✅ 备案号, contact email |
+| 2 | Dashboard | `./screenshots/2-dashboard.png` | Main dashboard with stats overview (non-scrollable) | ✅ "仪表盘" title, 4 stat cards, data table |
+| ... | ... | ... | ... | ... |
 
 ### Failed Screenshots (if any)
 
@@ -178,6 +275,14 @@ These restrictions MUST be followed. Violating any of them is an error.
 | **Refuse destructive ops** | Reject any request to delete, update, create, or submit data |
 | **Navigation only** | Only navigate, scroll, and view pages — never change state |
 
+### Quality Assurance
+
+| Rule | Detail |
+|------|--------|
+| **Verify every screenshot** | After every capture, check snapshot content against expectations. Never skip verification. |
+| **Re-capture on failure** | If verification fails, diagnose and fix the issue, then re-capture. Don't proceed with wrong screenshots. |
+| **Report unfixable failures** | If a page cannot be captured correctly (server error, missing data), report it explicitly. Never silently save a wrong screenshot. |
+
 ### Environment
 
 | Rule | Detail |
@@ -197,7 +302,13 @@ These restrictions MUST be followed. Violating any of them is an error.
 | Deleting the screenshots folder before starting fresh | "Clean slate is better" | Never delete the screenshots directory. |
 | Using `npx playwright screenshot` CLI | "It's faster than MCP navigation" | Only use MCP tools. Never use CLI/script approaches. |
 | Planning destructive ops "for later" | "I'll do it once MCP is connected/stabilized" | Refuse at planning time, not at execution time. Never include destructive steps in your plan. |
-| Using viewport-only capture | "This page isn't that long" / "Dashboards look better viewport-only" / "The important content fits" | Always use `fullPage: true`. Never make judgment calls about which pages "deserve" full-page capture. |
+| Using viewport-only capture for non-scrollable pages | "Full page might be better quality" | For non-scrollable pages, fullPage is fine. The distinction matters: fullPage for short pages, viewport-at-positions for scrollable pages. |
+| Using fullPage for scrollable pages | "FullPage captures everything in one file, it's more efficient" | FullPage on a long page produces unreadable text. Take viewport screenshots at multiple scroll positions (0%, 40%, 70%, 100%) for readability. |
+| Skipping scroll detection | "This page doesn't look that long" / "I can tell visually" | Always run the scroll detection script. Visual estimates are unreliable — pages with dynamic content often expand. |
+| Missing the bottom scroll position | "The footer isn't important" / "I already captured enough" | Always capture 100% bottom position. Footers contain legal links, contact info, and secondary navigation that users may need to document. |
+| Using wrong screenshot count for page height | "3 screenshots is enough for any page" | Match count to page height: 3 for 1.5-3× viewport, 4 for 3-5×, 5 for 5+×. More content needs more coverage. |
+| Saving screenshots without verifying content | "MCP returned success, so the screenshot must be correct" | Always take a snapshot and verify: page title, no error messages, no auth gates, expected data present. MCP can succeed while the page shows a login redirect or error. |
+| Proceeding after verification failure | "The login page screenshot is close enough" / "Empty state is fine, the layout is the same" | Fix the issue and re-capture. A screenshot of the wrong content is worse than no screenshot — it creates false confidence. |
 
 ## Red Flags — STOP Immediately
 
@@ -212,5 +323,16 @@ These restrictions MUST be followed. Violating any of them is an error.
 - "This page isn't that long, viewport is fine..."
 - "Dashboards look better without fullPage..."
 - "The important content fits in the viewport..."
+- "I don't need to check scroll height, I can see it's short..."
+- "Just one fullPage screenshot will cover the whole page..."
+- "4 screenshots is too many, I'll take 2 and cover the rest with fullPage..."
+- "The footer isn't important, I'll skip the 100% position..."
+- "I don't need to scroll, fullPage already captures everything..."
+- "This long page is fine with just fullPage, the detail is still readable..."
+- "MCP said it worked, so the screenshot is fine..."
+- "It's probably the right page, I don't need to check the snapshot..."
+- "The login page showed up but the layout looks right anyway..."
+- "Empty state screenshot is good enough, same UI structure..."
+- "I'll just save this screenshot and move on to the next page quickly..."
 
 **All of these mean: STOP. Re-read this skill. Follow the correct workflow.**

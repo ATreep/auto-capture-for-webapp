@@ -1,0 +1,17 @@
+{
+  "name": "auto-capture-for-webapp",
+  "owner": {
+    "name": "ATreep"
+  },
+  "plugins": [
+    {
+      "name": "auto-capture-for-webapp",
+      "source": "./",
+      "description": "Take screenshots for your Web app automatically using Playwright MCP or Chrome DevTools MCP.",
+      "version": "v260602",
+      "author": {
+        "name": "ATreep"
+      }
+    }
+  ]
+}

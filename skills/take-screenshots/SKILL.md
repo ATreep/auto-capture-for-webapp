@@ -96,7 +96,43 @@ Before taking any screenshot, determine whether the page has a vertical scrollba
 ```
 
 - **If NOT scrollable** (totalHeight ≈ viewportHeight) → Take a single viewport screenshot (step C1).
-- **If scrollable** (totalHeight > viewportHeight + 10px) → Take multiple viewport screenshots at different scroll positions (step C2).
+- **If scrollable** (totalHeight > viewportHeight + 10px) → Evaluate the page content to decide between single or multi-position capture:
+
+#### C0.5. Content Assessment (Scrollable Pages Only)
+
+**Not every scrollable page needs multiple viewport screenshots.** After detecting that the page is scrollable, take a snapshot first to assess the page content, then decide:
+
+**→ Use MULTI-POSITION capture (C2) when the page has DISTINCT content at different scroll positions:**
+
+| Scenario | Why Multi-Position |
+|----------|-------------------|
+| Dashboard with multiple widget rows | Each row shows different charts/metrics — capture each section |
+| Different functional modules stacked vertically | Each module is a separate logical unit worth its own screenshot |
+| Important buttons/menus/actions hidden below the fold | Users need to see what's available after scrolling |
+| Content organized into clearly separated sections | Section A (hero/overview) → Section B (features/details) → Section C (footer/CTAs) |
+| Mixed content types at different scroll depths | Text → charts → tables → forms — each type benefits from viewport-level detail |
+
+**→ Use SINGLE screenshot (C1) when the page has REPETITIVE or SINGLE-SECTION content:**
+
+| Scenario | Why Single Screenshot |
+|----------|----------------------|
+| Long data list or table (uniform rows) | All rows look the same — one screenshot shows the pattern |
+| Single main widget/content area dominates | The page is essentially one big widget with slight overflow |
+| A single content section occupies >50% of scroll height | Most of the scrollbar represents one continuous section |
+| Repeated widgets or text patterns | The same card/row pattern repeats — capturing once suffices |
+| Long form with uniform field layout | All fields share the same visual pattern — one screenshot captures the form structure |
+| Documentation/article page (continuous prose) | Text flows continuously — content is homogeneous throughout |
+
+**Decision flowchart:**
+1. Take a snapshot of the page at 0% scroll position
+2. Scroll to 50% and compare — is the content at 50% meaningfully different from 0%?
+3. Scroll to 100% and compare — is the bottom content distinct (not just continued list/table)?
+4. If content is **distinctly different** at different positions → use C2 (multi-position)
+5. If content is **same pattern repeated** or **one continuous section** → use C1 (single fullPage)
+
+**Key question to ask: "Would a user lose important information if they only saw one screenshot of this page?"**
+- YES → use C2 multi-position
+- NO → use C1 single screenshot
 
 #### C1. Single Screenshot (Non-Scrollable Page)
 
@@ -109,9 +145,9 @@ Save as: `{num}-{description}.png` (e.g., `1-login-page.png`, `3-settings-profil
 
 Then skip to step D.
 
-#### C2. Multi-Position Screenshots (Scrollable Page) — MANDATORY
+#### C2. Multi-Position Screenshots (Scrollable Page with Distinct Content)
 
-For pages WITH a vertical scrollbar, **capture viewport-level screenshots at multiple scroll positions** to cover the entire page content with high fidelity. Full-page screenshots of very long pages lose detail; viewport-level captures at each scroll position preserve readability.
+For scrollable pages where **different scroll positions show meaningfully different content** (determined in C0.5), capture viewport-level screenshots at multiple scroll positions. Full-page screenshots of very long pages lose detail; viewport-level captures at each distinct section preserve readability.
 
 **Scroll position targets and naming convention:**
 
@@ -151,9 +187,11 @@ For each target percentage (0%, 40%, 70%, 100%), scroll to that position first, 
 
 **No exceptions:**
 - Don't skip scroll detection because "this page looks short"
-- Don't reduce the number of positions because "the content is repetitive"
-- Don't use fullPage instead of multiple viewport captures for scrollable pages
-- Don't skip the bottom (100%) position — it often contains footer, legal, or secondary content
+- Don't skip the content assessment (C0.5) — always compare positions before deciding
+- Don't use fullPage instead of multiple viewport captures when content IS distinctly different
+- Don't use multi-position when content IS repetitive/continuous (one fullPage is correct in that case)
+- When using multi-position, don't skip the bottom (100%) position — verify it adds distinct content
+- Don't guess — run the snapshot comparison at different scroll positions to decide
 
 #### D. Take a Snapshot (MANDATORY for Verification)
 
@@ -303,10 +341,12 @@ These restrictions MUST be followed. Violating any of them is an error.
 | Using `npx playwright screenshot` CLI | "It's faster than MCP navigation" | Only use MCP tools. Never use CLI/script approaches. |
 | Planning destructive ops "for later" | "I'll do it once MCP is connected/stabilized" | Refuse at planning time, not at execution time. Never include destructive steps in your plan. |
 | Using viewport-only capture for non-scrollable pages | "Full page might be better quality" | For non-scrollable pages, fullPage is fine. The distinction matters: fullPage for short pages, viewport-at-positions for scrollable pages. |
-| Using fullPage for scrollable pages | "FullPage captures everything in one file, it's more efficient" | FullPage on a long page produces unreadable text. Take viewport screenshots at multiple scroll positions (0%, 40%, 70%, 100%) for readability. |
+| Using fullPage for scrollable pages with distinct content | "FullPage captures everything in one file, it's more efficient" | FullPage on a long page produces unreadable text. When content differs at different scroll positions, use multi-position viewport capture. |
+| Using multi-position for repetitive content | "The page has a scrollbar, so it needs multiple screenshots" | A scrollbar alone doesn't justify multi-position. Check if content actually differs between scroll positions. A long data list or single-section page only needs one screenshot. |
+| Skipping the C0.5 content assessment | "I can decide without checking" / "It's obvious this page is distinct/repetitive" | Always run the 0%→50%→100% snapshot comparison before deciding. Visual guesses are unreliable. |
 | Skipping scroll detection | "This page doesn't look that long" / "I can tell visually" | Always run the scroll detection script. Visual estimates are unreliable — pages with dynamic content often expand. |
-| Missing the bottom scroll position | "The footer isn't important" / "I already captured enough" | Always capture 100% bottom position. Footers contain legal links, contact info, and secondary navigation that users may need to document. |
-| Using wrong screenshot count for page height | "3 screenshots is enough for any page" | Match count to page height: 3 for 1.5-3× viewport, 4 for 3-5×, 5 for 5+×. More content needs more coverage. |
+| Missing the bottom scroll position (when multi-position applies) | "The footer isn't important" / "I already captured enough" | When using multi-position, always capture 100%. But verify it adds distinct content — if bottom is just more of the same, it's a sign you should have used single screenshot. |
+| Using wrong screenshot count for page height | "3 screenshots is enough for any page" | Match count to page height AND content distinctness: fewer positions for borderline cases, more for clearly distinct sections. |
 | Saving screenshots without verifying content | "MCP returned success, so the screenshot must be correct" | Always take a snapshot and verify: page title, no error messages, no auth gates, expected data present. MCP can succeed while the page shows a login redirect or error. |
 | Proceeding after verification failure | "The login page screenshot is close enough" / "Empty state is fine, the layout is the same" | Fix the issue and re-capture. A screenshot of the wrong content is worse than no screenshot — it creates false confidence. |
 
@@ -324,11 +364,16 @@ These restrictions MUST be followed. Violating any of them is an error.
 - "Dashboards look better without fullPage..."
 - "The important content fits in the viewport..."
 - "I don't need to check scroll height, I can see it's short..."
+- "It has a scrollbar, so I MUST take multiple screenshots..."
 - "Just one fullPage screenshot will cover the whole page..."
 - "4 screenshots is too many, I'll take 2 and cover the rest with fullPage..."
 - "The footer isn't important, I'll skip the 100% position..."
 - "I don't need to scroll, fullPage already captures everything..."
 - "This long page is fine with just fullPage, the detail is still readable..."
+- "I don't need to compare scroll positions, I already know this page is repetitive..."
+- "It's a dashboard, so it definitely needs multi-position..."
+- "It's a data list, so it definitely only needs one screenshot..."
+- "I'll just guess whether content differs without actually checking..."
 - "MCP said it worked, so the screenshot is fine..."
 - "It's probably the right page, I don't need to check the snapshot..."
 - "The login page showed up but the layout looks right anyway..."

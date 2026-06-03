@@ -1,5 +1,5 @@
 {
   "name": "auto-capture-for-webapp",
-  "description": "Take screenshots for your Web app automatically using Playwright MCP or Chrome DevTools MCP.",
+  "description": "Take screenshots for your Web app automatically using Playwright MCP.",
   "version": "v260603"
 }

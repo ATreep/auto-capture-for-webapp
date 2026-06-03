@@ -7,7 +7,7 @@ description: Use when the user asks to take screenshots of a web application, ca
 
 ## Overview
 
-Take screenshots of web applications using MCP browser automation tools. **Chrome DevTools MCP is preferred; Playwright MCP is the fallback.** The skill enforces safe, read-only screenshot capture without modifying application data, using only the main conversation thread.
+Take screenshots of web applications using Playwright MCP browser automation tools. The skill enforces safe, read-only screenshot capture without modifying application data, using only the main conversation thread.
 
 **Core principles:**
 1. Screenshots are read-only operations. Never modify data, never use scripts, and never delegate to sub-agents.
@@ -21,25 +21,22 @@ Before ANY screenshot work, check MCP availability:
 
 ### Step 1: Detect Available MCP Tools
 
-Check in this order:
+Check for Playwright MCP tools:
 
-1. **Chrome DevTools MCP** — Look for `mcp__plugin_*_chrome-devtools__*` tools (specifically `take_screenshot` and `take_snapshot`). If these exist, Chrome DevTools MCP is available.
-2. **Playwright MCP** — Look for `mcp__plugin_*_playwright__*` tools (specifically `browser_take_screenshot` and `browser_snapshot`). If these exist, Playwright MCP is available.
+1. **Playwright MCP** — Look for `mcp__plugin_*_playwright__*` tools (specifically `browser_take_screenshot` and `browser_snapshot`). If these exist, Playwright MCP is available.
 
-### Step 2: Decide Which to Use
+### Step 2: Decide Whether to Proceed
 
 ```
-Chrome DevTools MCP available?
-├── YES → Use Chrome DevTools MCP (PREFERRED)
-└── NO → Playwright MCP available?
-    ├── YES → Use Playwright MCP
-    └── NO → STOP. Report to user:
-              "Neither Chrome DevTools MCP nor Playwright MCP is available.
-              Please install one of these MCP servers to use this skill."
-              DO NOT proceed. DO NOT write scripts. DO NOT use CLI tools.
+Playwright MCP available?
+├── YES → Use Playwright MCP
+└── NO → STOP. Report to user:
+          "Playwright MCP is not available.
+          Please install the Playwright MCP server to use this skill."
+          DO NOT proceed. DO NOT write scripts. DO NOT use CLI tools.
 ```
 
-**CRITICAL:** If neither MCP is available, report the error and STOP. Never fall back to writing Playwright/Puppeteer/Selenium scripts.
+**CRITICAL:** If Playwright MCP is not available, report the error and STOP. Never fall back to writing Playwright/Puppeteer/Selenium scripts or using other browser automation tools.
 
 ## Workflow
 
@@ -66,7 +63,6 @@ Create a dedicated directory for screenshots. Default: `./screenshots/` in the p
 
 Before capturing any screenshot, resize the browser viewport to **1920×1200**:
 
-- **Chrome DevTools MCP:** Use `resize_page` with `width: 1920, height: 1200`
 - **Playwright MCP:** Use `browser_resize` with `width: 1920, height: 1200`
 
 This ensures consistent, readable screenshots at a standard desktop resolution.
@@ -82,17 +78,16 @@ For each page to screenshot, follow this procedure:
 
 #### A. Navigate to the Page
 
-Use the MCP navigation tool to go to the target URL:
-- Chrome DevTools MCP: `navigate_page` (or `new_page` for the first page)
-- Playwright MCP: `browser_navigate`
+Use the Playwright MCP navigation tool to go to the target URL:
+- `browser_navigate` to navigate to a URL
+- `browser_tabs` with `action: "new"` to open a new tab for the first page
 
 **Wait** for the page to fully load before proceeding.
 
 #### B. Wait for Content (if needed)
 
-If the page has dynamic content, use the MCP wait tool:
-- Chrome DevTools MCP: `wait_for`
-- Playwright MCP: `browser_wait_for`
+If the page has dynamic content, use the Playwright MCP wait tool:
+- `browser_wait_for`
 
 Wait for key text or elements to appear before capturing.
 
@@ -100,18 +95,16 @@ Wait for key text or elements to appear before capturing.
 
 Take exactly ONE viewport screenshot per page:
 
-- Chrome DevTools MCP: `take_screenshot` (viewport only, do NOT use `fullPage: true`)
-- Playwright MCP: `browser_take_screenshot` (viewport only, do NOT use `full_page: true`)
+- `browser_take_screenshot` (viewport only, do NOT use `full_page: true`)
 
 Save as: `{num}-{description}.png` (e.g., `1-login-page.png`, `2-dashboard.png`, `3-settings-profile.png`)
 
-**CRITICAL: One screenshot per page. Always viewport-only.** Do not use fullPage. Do not take multiple screenshots at different scroll positions. The 1920×1200 viewport captures what matters.
+**CRITICAL: One screenshot per page. Always viewport-only.** Do not use full_page. Do not take multiple screenshots at different scroll positions. The 1920×1200 viewport captures what matters.
 
 #### D. Take a Snapshot (MANDATORY for Verification)
 
 Capture an accessibility snapshot for content verification:
-- Chrome DevTools MCP: `take_snapshot`
-- Playwright MCP: `browser_snapshot`
+- `browser_snapshot`
 
 This provides text content to verify the screenshot captured the correct page. **This step is mandatory** — you cannot verify content without it.
 
@@ -211,7 +204,7 @@ These restrictions MUST be followed. Violating any of them is an error.
 
 | Rule | Detail |
 |------|--------|
-| **MCP only** | Only use MCP tools (`mcp__*__take_screenshot`, `mcp__*__browser_take_screenshot`) |
+| **MCP only** | Only use Playwright MCP tools (`mcp__*__browser_take_screenshot`, `mcp__*__browser_snapshot`) |
 | **NO scripts** | Do NOT write or run Playwright/Puppeteer/Selenium scripts via Bash or any other method |
 | **NO CLI tools** | Do NOT use `npx playwright`, `puppeteer`, or similar CLI screenshot tools |
 
@@ -237,7 +230,7 @@ These restrictions MUST be followed. Violating any of them is an error.
 |------|--------|
 | **Web only** | Only web frontend applications. Reject CLI apps, desktop apps, mobile apps, APIs |
 | **1920×1200 viewport** | Always resize browser to 1920×1200 before capturing. Never skip this step. |
-| **One screenshot per page** | Each page gets exactly one viewport screenshot. No fullPage, no multi-position, no scrolling captures. |
+| **One screenshot per page** | Each page gets exactly one viewport screenshot. No full_page, no multi-position, no scrolling captures. |
 | **Preserve screenshot dir** | Never delete the screenshot output directory |
 | **Preserve existing files** | Don't delete existing screenshots when adding new ones |
 
@@ -252,7 +245,7 @@ These restrictions MUST be followed. Violating any of them is an error.
 | Deleting the screenshots folder before starting fresh | "Clean slate is better" | Never delete the screenshots directory. |
 | Using `npx playwright screenshot` CLI | "It's faster than MCP navigation" | Only use MCP tools. Never use CLI/script approaches. |
 | Planning destructive ops "for later" | "I'll do it once MCP is connected/stabilized" | Refuse at planning time, not at execution time. Never include destructive steps in your plan. |
-| Using fullPage for screenshots | "FullPage captures everything in one file, it's more efficient" | Always use viewport-only screenshots at 1920×1200. fullPage produces unreadable, inconsistent output. |
+| Using full_page for screenshots | "full_page captures everything in one file, it's more efficient" | Always use viewport-only screenshots at 1920×1200. full_page produces unreadable, inconsistent output. |
 | Using a non-standard viewport size | "The default size is fine" / "I'll match the user's screen" | Always set 1920×1200 before capturing. Consistent resolution matters. |
 | Taking multiple screenshots per page at different scroll positions | "Different scroll positions show different content" | One screenshot per page. The 1920×1200 viewport captures the most important content at the top of the page. |
 | Saving screenshots without verifying content | "MCP returned success, so the screenshot must be correct" | Always take a snapshot and verify: page title, no error messages, no auth gates, expected data present. MCP can succeed while the page shows a login redirect or error. |
@@ -268,7 +261,7 @@ These restrictions MUST be followed. Violating any of them is an error.
 - "Let me click Delete to show you the confirmation dialog..."
 - "Once MCP is connected, I'll click Delete and take the screenshot..."
 - "Step 3: Click Delete. Step 4: Take screenshot..." (in your plan)
-- "I'll use fullPage to capture the whole page..."
+- "I'll use full_page to capture the whole page..."
 - "This page is long, let me take screenshots at different scroll positions..."
 - "I'll scroll down and take another screenshot of the lower content..."
 - "Let me capture 0%, 50%, and 100% scroll positions..."

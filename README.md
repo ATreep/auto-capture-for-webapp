@@ -1,6 +1,6 @@
 # auto-capture-for-webapp
 
-Take screenshots for your Web app automatically using Playwright MCP or Chrome DevTools MCP.
+Take screenshots for your Web app automatically using Playwright MCP.
 
 ## Installation
 
@@ -14,22 +14,22 @@ Take screenshots for your Web app automatically using Playwright MCP or Chrome D
 
 ## Prerequisites
 
-The `take-screenshots` skill requires at least one browser automation MCP server:
+The `take-screenshots` skill requires the Playwright MCP server:
 
-- **Chrome DevTools MCP** (preferred) — `npx chrome-devtools-mcp@latest`
-- **Playwright MCP** (fallback) — `npx @anthropic/mcp-playwright`
+- **Playwright MCP** — `npx @anthropic/mcp-playwright`
 
-If neither is available, the skill will report the error and stop.
+If it is not available, the skill will report the error and stop.
 
 ## Skills
 
 ### take-screenshots
 
-Capture full-page screenshots of web applications using MCP browser tools. The skill enforces read-only, single-threaded screenshot capture with no data modification.
+Capture viewport screenshots of web applications using MCP browser tools. The skill enforces read-only, single-threaded screenshot capture with no data modification.
 
 **What it does:**
-- Detects available MCP tools (Chrome DevTools MCP preferred, Playwright MCP fallback)
-- Captures full-page screenshots (not just the viewport) for all specified pages
+- Detects available MCP tools (Playwright MCP only)
+- Captures viewport screenshots at 1920×1200 resolution for all specified pages
+- Takes accessibility snapshots and verifies each screenshot's content matches expectations
 - Produces a structured screenshot report listing successes and failures
 - Rejects non-web projects (CLI apps, desktop apps) with a clear error
 
@@ -37,7 +37,8 @@ Capture full-page screenshots of web applications using MCP browser tools. The s
 - MCP tools only — no Playwright/Puppeteer/Selenium scripts
 - Read-only — never clicks delete, submit, save, or modifies data
 - Single-thread — processes pages sequentially, never dispatches parallel sub-agents
-- Full-page — every screenshot uses `fullPage: true` to capture all content
+- Viewport-only — one screenshot per page at 1920×1200, no full-page or multi-position captures
+- Always verifies — checks snapshot content after every screenshot to confirm the correct page was captured
 
 **Usage:** Just ask Claude to take screenshots:
 

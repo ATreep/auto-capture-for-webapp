@@ -8,7 +8,7 @@
       "name": "auto-capture-for-webapp",
       "source": "./",
       "description": "Take screenshots for your Web app automatically using Playwright MCP.",
-      "version": "v260603",
+      "version": "v260604",
       "author": {
         "name": "ATreep"
       }
